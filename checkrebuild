@@ -11,7 +11,7 @@ get_broken_ldd_pkgs() {
     xargs -I{} find -L "{}" -maxdepth 1 -type f -print0 |
     xargs -0 readlink -f |
     sort -u |
-    parallel --will-cite 'ldd "{}" 2>/dev/null | grep "not found" >/dev/null && pacman -Qqo "{}"'
+    parallel --will-cite 'ldd -r "{}" 2>/dev/null | grep -P "(not found|undefined symbol)" >/dev/null && pacman -Qqo "{}"'
 }
 
 get_broken_python_pkgs() {
