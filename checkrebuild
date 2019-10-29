@@ -4,6 +4,7 @@
 
 shopt -s nullglob
 shopt -s extglob
+export log=$(mktemp /tmp/rebuild-detector.XXX)
 
 get_broken_ldd_pkgs() {
     while IFS= read -rd: dir; do readlink -f "$dir"; done <<<"$PATH" |
@@ -11,7 +12,7 @@ get_broken_ldd_pkgs() {
     xargs -I{} find -L "{}" -maxdepth 1 -type f -print0 |
     xargs -0 readlink -f |
     sort -u |
-    parallel --will-cite 'ldd -r "{}" 2>/dev/null | grep -P "(not found|undefined symbol)" >/dev/null && pacman -Qqo "{}"'
+    parallel --will-cite 'ldd -r "{}" 2>/dev/null | grep -P "(not found|undefined symbol)" > >( c++filt >> $log ) && pacman -Qqo "{}"'
 }
 
 get_broken_python_pkgs() {
