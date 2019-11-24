@@ -5,13 +5,33 @@
 shopt -s nullglob
 shopt -s extglob
 
+log="$(mktemp)"
+trap 'rm -rf "$log"' EXIT
+
+verbose=0
+while getopts "v" OPTION; do
+    case $OPTION in
+        v) verbose=1 ;;
+        *) exit 1 ;;
+    esac
+done
+
+get_unofficial_pkgs() {
+    official_repos="testing core extra community-testing community multilib-testing multilib"
+    comm -23 <(pacman -Qq | sort) <(pacman -Sl $official_repos 2>/dev/null | awk '/\[.*[[:alpha:]]+]$/ {print $2};/\[.*[[:digit:]]+]$/ {print $2}' | sort)
+}
+
+filter_executable() {
+    while read -r file; do
+        [[ -f $file && -x $file ]] && echo $file
+    done
+}
+
 get_broken_ldd_pkgs() {
-    while IFS= read -rd: dir; do readlink -f "$dir"; done <<<"$PATH" |
-    sort -u |
-    xargs -I{} find -L "{}" -maxdepth 1 -type f -print0 |
-    xargs -0 readlink -f |
-    sort -u |
-    parallel --will-cite 'ldd -r "{}" 2>/dev/null | grep -P "(not found|undefined symbol)" >/dev/null && pacman -Qqo "{}"'
+    get_unofficial_pkgs |
+    xargs pacman -Qql |
+    filter_executable |
+    parallel --will-cite "ldd -r '{}' 2>/dev/null | grep -P '(not found|undefined symbol)' > >( echo -e '\nchecking: {}\n' >> '$log'; c++filt >> '$log' ) && pacman -Qqo '{}'"
 }
 
 get_broken_python_pkgs() {
@@ -40,5 +60,6 @@ get_repo_pkgs() {
 }
 
 join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
+(( verbose )) && cat "$log"
 
 exit 0
