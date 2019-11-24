@@ -5,7 +5,7 @@
 shopt -s nullglob
 shopt -s extglob
 
-log="$(mktemp)"
+log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
 
 verbose=0
@@ -31,7 +31,10 @@ get_broken_ldd_pkgs() {
     get_unofficial_pkgs |
     xargs pacman -Qql |
     filter_executable |
-    parallel --will-cite "ldd -r '{}' 2>/dev/null | grep -P '(not found|undefined symbol)' > >( echo -e '\nchecking: {}\n' >> '$log'; c++filt >> '$log' ) && pacman -Qqo '{}'"
+    parallel --will-cite '
+        ldd -r "{}" 2>/dev/null |
+        grep -P "(not found|undefined symbol)" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd -r {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
+        pacman -Qqo "{}"'
 }
 
 get_broken_python_pkgs() {
@@ -60,6 +63,12 @@ get_repo_pkgs() {
 }
 
 join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
-(( verbose )) && cat "$log"
+
+if (( verbose )); then
+    cd "$log"
+    for f in *; do
+        cat "$f"
+    done
+fi
 
 exit 0
