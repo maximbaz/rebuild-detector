@@ -30,7 +30,8 @@ filter_executable() {
 get_broken_ldd_pkgs() {
     get_unofficial_pkgs |
     xargs pacman -Qql |
-    xargs readlink -f |
+    perl -pe 's/\n/\0/' |
+    xargs -0 readlink -f |
     filter_executable |
     parallel --will-cite '
         ldd "{}" 2>/dev/null |
