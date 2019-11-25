@@ -30,6 +30,7 @@ filter_executable() {
 get_broken_ldd_pkgs() {
     get_unofficial_pkgs |
     xargs pacman -Qql |
+    sed -E "s/(\"|')/\\\\\1/g"|
     xargs readlink -f |
     filter_executable |
     parallel --will-cite '
