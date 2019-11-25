@@ -33,8 +33,8 @@ get_broken_ldd_pkgs() {
     xargs readlink -f |
     filter_executable |
     parallel --will-cite '
-        ldd -r "{}" 2>/dev/null |
-        grep -P "(not found|undefined symbol)" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd -r {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
+        ldd "{}" 2>/dev/null |
+        grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
         pacman -Qqo "{}"'
 }
 
