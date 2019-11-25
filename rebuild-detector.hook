@@ -1,0 +1,9 @@
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Checking which packages need to be rebuilt
+Exec = /usr/bin/checkrebuild
+When = PostTransaction
