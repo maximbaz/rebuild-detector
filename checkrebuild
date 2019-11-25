@@ -36,14 +36,26 @@ filter_executable() {
     done
 }
 
+ldd_detect_broken_files() {
+    log="$log/$RANDOM"
+    ldd_resolve=$(ldd -r "$1" 2>/dev/null)
+    not_found=$(grep -q "not found" <<<"$ldd_resolve") && { pacman -Qqo "$1"; echo -e "\nldd $1\n$not_found" >> "$log"; exit 0; }
+    if undefined_symbols=$(grep -oP "undefined symbol: \K.*(?=\t)" <<<"$ldd_resolve"); then 
+        c++filt <<<"$undefined_symbols" >> "$log"
+        for symbol in $undefined_symbols; do
+            scanelf_resolve=$(scanelf -pls +"$symbol") && resolved_symbols+=("$symbol") || unresolved_symbols+=("$symbol: $scanelf_resolve")
+        done
+    fi
+    [ -v unresolved_symbols ] && pacman -Qqo "$1"
+}
+
 get_broken_ldd_pkgs() {
+    export -f ldd_detect_broken_files
+    export log
     get_unofficial_pkgs |
     get_package_files |
     filter_executable |
-    parallel ${_terminal_output:+--bar} --will-cite '
-        ldd "{}" 2>/dev/null |
-        grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
-        pacman -Qqo "{}"'
+    parallel ${_terminal_output:+--bar} --will-cite ldd_detect_broken_files
 }
 
 get_broken_python_pkgs() {
