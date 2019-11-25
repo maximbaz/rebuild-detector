@@ -23,6 +23,12 @@ get_unofficial_pkgs() {
     comm -23 <(pacman -Qq | sort) <(eval pacman -Sql "$local_enabled_repos" 2>/dev/null | sort)
 }
 
+get_package_files() {
+    xargs pacman -Qql |
+    perl -pe 's/\n/\0/' |
+    xargs -0 readlink -f
+}
+
 filter_executable() {
     while read -r file; do
         [[ -f "$file" && -x "$file" ]] &&  echo "$file"
@@ -31,9 +37,7 @@ filter_executable() {
 
 get_broken_ldd_pkgs() {
     get_unofficial_pkgs |
-    xargs pacman -Qql |
-    perl -pe 's/\n/\0/' |
-    xargs -0 readlink -f |
+    get_package_files |
     filter_executable |
     parallel ${_terminal_output:+--bar} --will-cite '
         ldd "{}" 2>/dev/null |
