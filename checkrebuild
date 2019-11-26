@@ -39,14 +39,22 @@ filter_executable() {
 ldd_detect_broken_files() {
     log="$log/$RANDOM"
     ldd_resolve=$(ldd -r "$1" 2>/dev/null)
-    not_found=$(grep -q "not found" <<<"$ldd_resolve") && { pacman -Qqo "$1"; echo -e "\nldd $1\n$not_found" >> "$log"; exit 0; }
+    if missing_shared_objects=$(grep "not found" <<<"$ldd_resolve"); then
+        pacman -Qqo "$1"
+        echo -e "\nldd $1\n$missing_shared_objects" >> "$log"
+        return 0
+    fi
     if undefined_symbols=$(grep -oP "undefined symbol: \K.*(?=\t)" <<<"$ldd_resolve"); then 
-        c++filt <<<"$undefined_symbols" >> "$log"
+        scanelf_resolve=$(scanelf -pls "+$(tr '\n' ','<<<"$undefined_symbols")"|grep -f <(echo "${undefined_symbols}"))
         for symbol in $undefined_symbols; do
-            scanelf_resolve=$(scanelf -pls +"$symbol") && resolved_symbols+=("$symbol") || unresolved_symbols+=("$symbol: $scanelf_resolve")
+            if scanelf_resolve_symbol=$(grep "$symbol" <<<"$scanelf_resolve"); then
+                resolved_symbols+=("$symbol: $scanelf_resolve_symbol")
+            else
+                unresolved_symbols+=("$symbol")
+            fi
         done
     fi
-    [ -v unresolved_symbols ] && pacman -Qqo "$1"
+    [ -v unresolved_symbols ] && { pacman -Qqo "$1"; echo -e "\nldd $1\nunresolved symbols: ${unresolved_symbols[*]}" >> "$log"; return 0; }
 }
 
 get_broken_ldd_pkgs() {
