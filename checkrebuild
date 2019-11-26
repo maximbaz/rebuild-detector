@@ -5,6 +5,7 @@
 
 shopt -s nullglob
 shopt -s extglob
+[ -t 1 ] && declare _terminal_output=1
 
 log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
@@ -34,7 +35,7 @@ get_broken_ldd_pkgs() {
     perl -pe 's/\n/\0/' |
     xargs -0 readlink -f |
     filter_executable |
-    parallel --will-cite '
+    parallel ${_terminal_output:+--bar} --will-cite '
         ldd "{}" 2>/dev/null |
         grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
         pacman -Qqo "{}"'
