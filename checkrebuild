@@ -38,32 +38,40 @@ filter_executable() {
 
 ldd_detect_broken_files() {
     log="$log/$RANDOM"
-    ldd_resolve=$(ldd -r "$1" 2>/dev/null)
-    if missing_shared_objects=$(grep "not found" <<<"$ldd_resolve"); then
-        pacman -Qqo "$1"
-        echo -e "\nldd $1\n$missing_shared_objects" >> "$log"
-        return 0
-    fi
-    if undefined_symbols=$(grep -oP "undefined symbol: \K.*(?=\t)" <<<"$ldd_resolve"); then 
-        scanelf_resolve=$(scanelf -pls "+$(tr '\n' ','<<<"$undefined_symbols")"|grep -f <(echo "${undefined_symbols}"))
-        for symbol in $undefined_symbols; do
-            if scanelf_resolve_symbol=$(grep "$symbol" <<<"$scanelf_resolve"); then
-                resolved_symbols+=("$symbol: $scanelf_resolve_symbol")
-            else
-                unresolved_symbols+=("$symbol")
-            fi
-        done
-    fi
-    [ -v unresolved_symbols ] && { pacman -Qqo "$1"; echo -e "\nldd $1\nunresolved symbols: ${unresolved_symbols[*]}" >> "$log"; return 0; }
+    while read -r file; do
+        ldd_resolve=$(ldd -r "$file" 2>/dev/null)
+        if missing_shared_objects=$(grep "not found" <<<"$ldd_resolve"); then
+            pacman -Qqo "$file"
+            echo -e "\nldd $file\n$missing_shared_objects" >> "$log"
+            echo -e "\nldd $file\n$missing_shared_objects" >&2
+            return 0
+        fi
+        if undefined_symbols=$(grep -oP "undefined symbol: \K.*(?=\t)" <<<"$ldd_resolve"); then
+            scanelf_resolve=$(scanelf -pls "+$(tr '\n' ','<<<"$undefined_symbols")"|grep -f <(echo "${undefined_symbols}"))
+            for symbol in $undefined_symbols; do
+                if scanelf_resolve_symbol=$(grep "$symbol" <<<"$scanelf_resolve"); then
+                    resolved_symbols+=("$symbol: $scanelf_resolve_symbol")
+                else
+                    unresolved_symbols+=("$symbol")
+                fi
+            done
+        fi
+        if [ -v unresolved_symbols ]; then
+            pacman -Qqo "$file"
+            echo -e "\nldd $file\nunresolved symbols: ${unresolved_symbols[*]}" >> "$log"
+            echo -e "\nldd $file\nunresolved symbols: ${unresolved_symbols[*]}" >&2
+            return 0
+        fi
+    done
 }
 
 get_broken_ldd_pkgs() {
+    export -f get_package_files
+    export -f filter_executable
     export -f ldd_detect_broken_files
     export log
     get_unofficial_pkgs |
-    get_package_files |
-    filter_executable |
-    parallel ${_terminal_output:+--bar} --will-cite ldd_detect_broken_files
+    parallel ${_terminal_output:+--bar} --will-cite "echo {}|get_package_files|filter_executable|ldd_detect_broken_files"
 }
 
 get_broken_python_pkgs() {
