@@ -42,11 +42,25 @@ ldd_detect_broken_files() {
     mapfile -t files < <(cat)
     for file in "${files[@]}"; do
         ldd_resolve=$(ldd -r "$file" 2>/dev/null)
-        if missing_shared_objects=$(grep "not found" <<<"$ldd_resolve"); then
-            pacman -Qqo "$file"
-            echo -e "\nldd $file\n$missing_shared_objects" >> "$log"
-            echo -e "\nldd $file\n$missing_shared_objects" >&2
-            return 0
+        if missing_shared_objects=$(grep -oP "(?<=\t).*?(?= => not found)" <<<"$ldd_resolve"); then
+            for shared_object in $missing_shared_objects; do
+                if shared_object_resolve=$(grep -oP "[^ ]*$shared_object"<<<"${files[*]}"); then
+                    resolved_shared_objects+=("$shared_object_resolve")
+                else
+                    unresolved_shared_objects+=("$shared_object")
+                fi
+            done
+            if [ -v unresolved_shared_objects ]; then
+                echo -e "\nldd $file\nunresolved shared objects: ${unresolved_shared_objects[*]}" >> "$log"
+                echo -e "\nldd $file\nunresolved shared objects: ${unresolved_shared_objects[*]}" >&2
+                pacman -Qqo "$file"
+                return 0
+            fi
+        fi
+        #update $ldd_resolve with $resolved_shared_objects.
+        if [[ -v resolved_shared_objects[@] ]]; then
+            library_path=$(IFS=$'\n'; sort -u<<<"${resolved_shared_objects[*]%/*}"|paste -sd ':')
+            ldd_resolve=$(LD_LIBRARY_PATH="$library_path" ldd -r "$file" 2>/dev/null)
         fi
         if undefined_symbols=$(grep -oP "undefined symbol: \K.*(?=\t)" <<<"$ldd_resolve"); then
             scanelf_resolve=$(scanelf -pls "+$(tr '\n' ','<<<"$undefined_symbols")"|grep -f <(echo "${undefined_symbols}"))
