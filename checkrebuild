@@ -26,7 +26,8 @@ get_unofficial_pkgs() {
 get_package_files() {
     xargs pacman -Qql |
     perl -pe 's/\n/\0/' |
-    xargs -0 -I{} readlink -f "{}"
+    xargs -0 -I{} readlink -f "{}" |
+    sort -u
 }
 
 filter_executable() {
