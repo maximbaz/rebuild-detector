@@ -31,7 +31,7 @@ get_package_files() {
 
 filter_executable() {
     while read -r file; do
-        [[ -f "$file" && -x "$file" ]] &&  echo "$file"
+        [[ -f "$file" && -x "$file" ]] && file "$file"|grep -q ELF && echo "$file"
     done
 }
 
