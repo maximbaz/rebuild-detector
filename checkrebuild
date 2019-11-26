@@ -38,7 +38,9 @@ filter_executable() {
 
 ldd_detect_broken_files() {
     log="$log/$RANDOM"
-    while read -r file; do
+    declare -a files
+    mapfile -t files < <(cat)
+    for file in "${files[@]}"; do
         ldd_resolve=$(ldd -r "$file" 2>/dev/null)
         if missing_shared_objects=$(grep "not found" <<<"$ldd_resolve"); then
             pacman -Qqo "$file"
