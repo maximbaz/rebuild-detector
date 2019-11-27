@@ -195,7 +195,13 @@ get_repo_pkgs() {
     pacman -Qqm | awk '{print "foreign", $0}'
 }
 
-join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
+if [[ "${BASH_SOURCE[-1]}" =~ bashdb ]]
+then 
+    get_package_files<<<"apparmor"|filter_executable|ldd_detect_broken_files|nl
+    get_package_files<<<"ardour"|filter_executable|ldd_detect_broken_files|nl
+    get_package_files<<<"alsa-utils"|filter_executable|ldd_detect_broken_files|nl
+else join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
+fi
 
 if (( verbose>1 )); then
     sort -k4 -n "$log/rebuild-detector-parallel.log"
