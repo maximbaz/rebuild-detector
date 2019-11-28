@@ -41,6 +41,20 @@ ldd_detect_broken_files() {
     declare -a files
     declare -A resolved_symbols
     mapfile -t files < <(cat)
+    resolve_symbol_cache() {
+    #args: $1: name of the missing symbols variable (string|array).
+    #      $2: name of scanelf resolve variable (string).
+    #      $3: name of output array.
+            #clear output variable
+            eval 'unset '"$3"
+            for symbol in $(eval echo '${'"$1"'[*]}'); do
+                if scanelf_resolve_symbol=$(eval 'grep -oP "$symbol.*  \K.*" <<<$'"$2"); then
+                    resolved_symbols+=(["$symbol"]="$scanelf_resolve_symbol")
+                else
+                    eval "$3"'+=("$symbol")'
+                fi
+            done
+    }
     for file in "${files[@]}"; do
         ldd_resolve=$(ldd -r "$file" 2>/dev/null)
         if missing_shared_objects=$(grep -oP "(?<=\t).*?(?= => not found)" <<<"$ldd_resolve"); then
@@ -74,13 +88,7 @@ ldd_detect_broken_files() {
             #package wide symbol resolution.
             scanelf_resolve=$(scanelf -qs "+$(tr $'\n' ','<<<"$undefined_symbols"|sed -e 's/,$//' -e 's/,/,\+/g')" "${files[@]}"|grep -f <(echo "${undefined_symbols}"))
             if [ -n "$scanelf_resolve" ]; then
-                for symbol in $undefined_symbols; do
-                    if scanelf_resolve_symbol=$(grep -oP "$symbol.*  \K.*" <<<"$scanelf_resolve"); then
-                        resolved_symbols+=(["$symbol"]="$scanelf_resolve_symbol")
-                    else
-                        local_unresolved_symbols+=("$symbol")
-                    fi
-                done
+                resolve_symbol_cache undefined_symbols scanelf_resolve local_unresolved_symbols
             else
                 mapfile -t local_unresolved_symbols <<<"$undefined_symbols"
             fi
@@ -88,20 +96,20 @@ ldd_detect_broken_files() {
         if [ -v local_unresolved_symbols ]; then
             #system wide symbol resolution.
             scanelf_resolve=$(scanelf -qpls "+$(IFS=','; echo "${local_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')"|grep -f <(IFS=$'\n'; echo "${local_unresolved_symbols[*]}"))
-            if [ -z "$scanelf_resolve" ]; then
-                scanelf_resolve=$(scanelf -qlRs "+$(IFS=','; echo "${local_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')"|grep -f <(IFS=$'\n'; echo "${local_unresolved_symbols[*]}"))
+            if [ -n "$scanelf_resolve" ]; then
+                resolve_symbol_cache local_unresolved_symbols scanelf_resolve system_wide_unresolved_symbols
+            else
+                mapfile -t system_wide_unresolved_symbols <<<"$local_unresolved_symbols"
             fi
-            for symbol in ${local_unresolved_symbols[*]}; do
-                if scanelf_resolve_symbol=$(grep -oP "$symbol.*  \K.*" <<<"$scanelf_resolve"); then
-                    resolved_symbols+=(["$symbol"]="$scanelf_resolve_symbol")
-                else
-                    system_wide_unresolved_symbols+=("$symbol")
-                fi
-            done
             if [ -v system_wide_unresolved_symbols ]; then
+            #do a deep search.
+            scanelf_resolve=$(scanelf -qRs "+$(IFS=','; echo "${system_wide_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')" /usr/{bin,lib}|grep -f <(IFS=$'\n'; echo "${system_wide_unresolved_symbols[*]}"))
+            [ -n "$scanelf_resolve" ] && resolve_symbol_cache system_wide_unresolved_symbols scanelf_resolve deep_unresolved_symbols
+            fi
+            if [ -v deep_unresolved_symbols ]; then
                 pacman -Qqo "$file"
-                echo -e "\nldd $file\nunresolved symbols: ${system_wide_unresolved_symbols[*]}" >> "$log"
-                echo -e "\nldd $file\nunresolved symbols: ${system_wide_unresolved_symbols[*]}" >&2
+                echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >> "$log"
+                echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
                 return 0
             fi
         fi
