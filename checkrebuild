@@ -40,6 +40,7 @@ ldd_detect_broken_files() {
     log="$log/$RANDOM"
     declare -a files
     declare -A resolved_symbols
+    declare -A unresolved_symbols
     mapfile -t files < <(cat)
     resolve_symbol_cache() {
     #args: $1: name of the missing symbols variable (string|array).
@@ -78,7 +79,16 @@ ldd_detect_broken_files() {
             ldd_resolve=$(LD_LIBRARY_PATH="$library_path" ldd -r "$file" 2>/dev/null)
         fi
         #drop symbol version, not supported by `scanelf`
-        if undefined_symbols=$(grep -oP "undefined symbol: \K.*?(?=[\t,])" <<<"$ldd_resolve"); then
+        if ! undefined_symbols=$(grep -oP "undefined symbol: \K.*?(?=[\t,])" <<<"$ldd_resolve"); then
+            continue
+        else
+            #report $files as broken if depends on unresolved symbol.
+            if [[ -v unresolved_symbols[@] ]] && known_unresolved_symbols=$(grep -f <(IFS=$'\n'; echo "${!unresolved_symbols[*]}") <<<"$undefined_symbols"); then
+                pacman -Qqo "$file"
+                echo -e "\nldd $file\n(cached)unresolved symbols: $known_unresolved_symbols" >> "$log"
+                echo -e "\nldd $file\n(cached)unresolved symbols: $known_unresolved_symbols" >&2
+                return 0
+            fi
             #drop cached symbols.
             if [[ -v resolved_symbols[@] ]]; then
                 undefined_symbols=$(grep -v -f <(IFS=$'\n'; echo "${!resolved_symbols[*]}") <<<"$undefined_symbols")
@@ -110,6 +120,10 @@ ldd_detect_broken_files() {
                 pacman -Qqo "$file"
                 echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >> "$log"
                 echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
+                #cache unresolved symbols
+                for symbol in ${deep_unresolved_symbols[*]}; do
+                    unresolved_symbols+=(["$symbol"]="$file")
+                done
                 return 0
             fi
         fi
