@@ -13,7 +13,7 @@ trap 'rm -rf "$log"' EXIT
 verbose=0
 while getopts "v" OPTION; do
     case $OPTION in
-        v) verbose=1 ;;
+        v) ((verbose+=1)) ;;
         *) exit 1 ;;
     esac
 done
@@ -37,7 +37,6 @@ filter_executable() {
 }
 
 ldd_detect_broken_files() {
-    log="$log/$RANDOM"
     declare -a files
     declare -A resolved_symbols
     declare -A unresolved_symbols
@@ -67,9 +66,9 @@ ldd_detect_broken_files() {
                 fi
             done
             if [ -v unresolved_shared_objects ]; then
-                echo -e "\nldd $file\nunresolved shared objects: ${unresolved_shared_objects[*]}" >> "$log"
-                echo -e "\nldd $file\nunresolved shared objects: ${unresolved_shared_objects[*]}" >&2
-                pacman -Qqo "$file"
+                pkg=$(pacman -Qqo "$file")
+                (( verbose )) && echo -e "$pkg: $file\nunresolved shared objects: ${unresolved_shared_objects[*]}" >&2
+                echo "$pkg"
                 return 0
             fi
         fi
@@ -84,9 +83,9 @@ ldd_detect_broken_files() {
         else
             #report $files as broken if depends on unresolved symbol.
             if [[ -v unresolved_symbols[@] ]] && known_unresolved_symbols=$(grep -f <(IFS=$'\n'; echo "${!unresolved_symbols[*]}") <<<"$undefined_symbols"); then
-                pacman -Qqo "$file"
-                echo -e "\nldd $file\n(cached)unresolved symbols: $known_unresolved_symbols" >> "$log"
-                echo -e "\nldd $file\n(cached)unresolved symbols: $known_unresolved_symbols" >&2
+                pkg=$(pacman -Qqo "$file")
+                (( verbose )) && echo -e "$pkg: $file\n(cached)unresolved symbols: $known_unresolved_symbols" >&2
+                echo "$pkg"
                 return 0
             fi
             #drop cached symbols.
@@ -117,13 +116,13 @@ ldd_detect_broken_files() {
             [ -n "$scanelf_resolve" ] && resolve_symbol_cache system_wide_unresolved_symbols scanelf_resolve deep_unresolved_symbols
             fi
             if [ -v deep_unresolved_symbols ]; then
-                pacman -Qqo "$file"
-                echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >> "$log"
-                echo -e "\nldd $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
+                pkg=$(pacman -Qqo "$file")
+                (( verbose )) && echo -e "$pkg: $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
                 #cache unresolved symbols
                 for symbol in ${deep_unresolved_symbols[*]}; do
                     unresolved_symbols+=(["$symbol"]="$file")
                 done
+                echo "$pkg"
                 return 0
             fi
         fi
@@ -134,9 +133,9 @@ get_broken_ldd_pkgs() {
     export -f get_package_files
     export -f filter_executable
     export -f ldd_detect_broken_files
-    export log
+    export log verbose
     get_unofficial_pkgs |
-    parallel ${_terminal_output:+--bar} --will-cite "echo {}|get_package_files|filter_executable|ldd_detect_broken_files"
+    parallel ${_terminal_output:+--bar}  --will-cite --joblog "$log/rebuild-detector-parallel.log" "echo {}|get_package_files|filter_executable|ldd_detect_broken_files"
 }
 
 get_broken_python_pkgs() {
@@ -166,10 +165,8 @@ get_repo_pkgs() {
 
 join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
 
-if (( verbose )); then
-    for f in "$log"/*; do
-        cat "$f"
-    done
+if (( verbose>1 )); then
+    sort -k4 -n "$log/rebuild-detector-parallel.log"
 fi
 
 exit 0
