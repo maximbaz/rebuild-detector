@@ -1,0 +1,129 @@
+#!/bin/bash
+# vim:set ts=2 sw=2 et:
+# shellcheck disable=SC1067
+
+# Options:
+# --flags xxx: pass xxx to checkrebuild
+# --exclude xxx: exclude xxx packages, use perl regex match: e.g. "(perl-wx|python-*)"
+# --shuffle: shuffle packages before parallelization.
+
+[ ! -d .log ] && mkdir .log
+alphabeth=(0 {A..Z})
+
+declare -a stdout
+declare -a stderr
+declare -a script
+declare -a broken_pkgs
+declare -a timing
+declare jobs=$(nproc) #$(($(nproc)/2))
+export COLUMNS
+date=$(date +%F_%H:%M)
+
+function script_mod {
+sed \
+-e "s,parallel ,parallel -j$jobs ," \
+-e '/--joblog/s,--joblog "$log/rebuild-detector-parallel.log",,' \
+-e 's,parallel ,parallel --joblog \"${PWD}/.log/${__compare}_${date}_${hash}_joblog.log\" ,' \
+-e '/declare _terminal_output/s/^.*$/_terminal_output=1/' \
+-e '/--bar/s/${_terminal_output:+--bar}/--bar/'|\
+{ [[ -v _exclude ]] && sed -e '/^get_unofficial_pkgs()/s/$/ {/' -e "/^get_unofficial_pkgs()/,/^}$/s/^}$/}|grep -vP \"$_exclude\"; }/"||cat; }|\
+{ [[ -v _shuffle ]] && sed -e 's,parallel ,parallel --shuf ,' || cat; }
+#-e 's,|xargs -I{} bash -c "pacconf --repo={} Server|grep -q -v "file://" && echo {}",,' \
+}
+
+i=1
+while true; do
+  case "$1" in
+    "") break;;
+    --flags|--flag|-f) _flags="$2"; shift 2;;
+    --exclude|--exc|-e) _exclude="$2"; shift 2;;
+    --shuffle|--shuf|-s) _shuffle=1; shift;;
+    -*) echo "usage: ${0#*/} compare files or commits or a mix of both" >&2 && exit 1;;
+     *) compare+=(["$((i++))"]="$1"); shift;;
+  esac
+done
+
+[[ ! -v compare[@] ]] && compare=([1]="checkrebuild" [2]="$(git rev-parse --short HEAD)")
+[[ ${#compare[*]} == 1 ]] && compare=([1]="checkrebuild" [2]="${compare[1]}")
+
+for i in $(seq 1 ${#compare[*]}); do
+  [[ -x "${compare[$i]}" ]] && { script[$i]="$(script_mod <"${compare[$i]}")"; continue; }
+  git cat-file -e "${compare[$i]}^{commit}" && { script[$i]="$(script_mod < <(git show "${compare[$i]}":checkrebuild))"; continue; }
+  echo "file|commit \"${compare[$i]}\" does not exist" >&2
+  exit 2
+done
+
+for i in $(seq 1 ${#script[*]}); do
+hash=$(md5sum<<<"$RANDOM"|cut -c -6)
+file_stderr="${PWD}/.log/${compare[$i]}_${date}_${hash}_stderr.log"
+file_stdout="${PWD}/.log/${compare[$i]}_${date}_${hash}_stdout.log"
+echo "Execute: ${compare[$i]}" >&2
+__compare="${compare[$i]}"
+export i hash date __compare
+env time bash -c "${script[$i]}" -- "$_flags" 1>"$file_stdout" 2>(tee "$file_stderr" >&2)
+stderr[$i]=$(<"$file_stderr")
+stdout[$i]=$(<"$file_stdout")
+broken_pkgs[$i]=$(expand<<<"${stdout[$i]}")
+timing[$i]=$(<"${PWD}/.log/${compare[$i]}_${date}_${hash}_joblog.log")
+done
+
+pkg_uniq=$(for i in $(seq 1 ${#stdout[*]});do echo "${broken_pkgs["$i"]}"; done|sort -u)
+max_len=$(echo "$pkg_uniq"|awk ' { if ( length > L ) { L=length} }END{ print L}')
+printf "%-${max_len}s" ${compare[*]}; echo
+(IFS=$'\n';for pkg in $pkg_uniq; do 
+for i in $(seq 1 ${#stdout[*]}); do
+printf "%-${max_len}s" "$([[ "${broken_pkgs["$i"]}" =~ $pkg ]] && echo "$pkg" || echo "-")"
+done; echo
+done)
+
+for i in $(seq 1 ${#stdout[*]}); do
+declare -A "stat_$i"
+while IFS=$'\t' read -r seq host start time send recv exit sig comm
+do eval stat_"$i"'+=(["$(grep -oP "echo \K.*?(?=\|)"<<<"$comm")"]="${time##* }")'
+done < <(tail -n +2 <<<"${timing[$i]}")
+done
+
+comm_uniq=$(for i in $(seq 1 ${#stdout[*]});do IFS=$'\n' eval 'echo "${!'stat_"$i"'[*]}"'; done|sort -u)
+max_len=$(echo "$comm_uniq"|awk ' { if ( length > L ) { L=length} }END{ print L}')
+printf "\n%-${max_len}s\n" "test runs:"
+for i in $(seq 1 ${#stdout[*]}); do
+echo -e "${alphabeth[$i]}:\t${compare[$i]}"
+done;
+
+printf "%-${max_len}s" "comparisons:"
+echo -en "\tA"
+for ((i=1;i<${#stdout[*]};i++)); do for ((j=i+1;j<=${#stdout[*]};j++)); do 
+echo -en "\t${alphabeth[$i]}-${alphabeth[$j]}"
+done;done;echo
+
+unset i j
+for ((i=1;i<${#stdout[*]};i++)); do for ((j=i+1;j<=${#stdout[*]};j++)); do 
+  eval declare -A diff_${i}_$j
+  for comm in $comm_uniq; do 
+    eval diff_${i}_$j'+=(["$comm"]=$(bc -l <<<"${'stat_$i'["$comm"]}-${'stat_$j'["$comm"]}"|sed -E "s/^([-]?)\./\10\./g"))'
+  done
+done; done
+
+unset i j
+for comm in $comm_uniq; do 
+printf "\n%${max_len}s" "$comm"
+echo -en "\t${stat_1["$comm"]}"
+for ((i=1;i<${#stdout[*]};i++)); do for ((j=i+1;j<=${#stdout[*]};j++)); do 
+eval 'echo -en "\t${'diff_${i}_$j'["$comm"]}"'
+done; done
+done|LANG=EN_en sort -k 2 -b -n
+
+printf "%-${max_len}s" "comparisons:"
+echo -en "\tA"
+for ((i=1;i<${#stdout[*]};i++)); do for ((j=i+1;j<=${#stdout[*]};j++)); do 
+echo -en "\t${alphabeth[$i]}-${alphabeth[$j]}"
+done;done;echo
+
+printf "\n%${max_len}s\t" "$sum [sec]:"
+echo -en "$(IFS='+'; echo "${stat_1[*]}"|bc)\t"
+for ((i=1;i<${#stdout[*]};i++)); do for ((j=i+1;j<=${#stdout[*]};j++)); do
+echo -en "$(IFS='+' eval 'echo "${'diff_${i}_${j}'[*]}"'|bc)\t"
+done; done;echo #add newline
+
+
+#vimdiff "/dev/fd/${_diff[0]}" "/dev/fd/${_diff[1]}" </dev/tty
