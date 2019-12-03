@@ -40,9 +40,6 @@ filter_executable() {
 ldd_detect_broken_files() {
     declare -a files
     declare -A resolved_symbols
-    if [[ -s "$log/resolved_symbols" ]]; then
-        flock -s "$log/resolved_symbols" -c "source $log/resolved_symbols"
-    fi
     declare -A unresolved_symbols
     mapfile -t files < <(cat)
     resolve_symbol_cache() {
@@ -86,6 +83,9 @@ ldd_detect_broken_files() {
             continue
         else
             #report $files as broken if depends on unresolved symbol.
+            if [[ -s "$log/resolved_symbols" ]]; then
+                flock -s "$log/resolved_symbols" -c "source $log/resolved_symbols"
+            fi
             if [[ -v unresolved_symbols[@] ]] && known_unresolved_symbols=$(grep -f <(IFS=$'\n'; echo "${!unresolved_symbols[*]}") <<<"$undefined_symbols"); then
                 pkg=$(pacman -Qqo "$file")
                 (( verbose )) && echo -e "$pkg: $file\n(cached)unresolved symbols: $known_unresolved_symbols" >&2
@@ -133,12 +133,19 @@ ldd_detect_broken_files() {
     done
     if [[ -v resolved_symbols[@] ]]; then
         resolved_symbols_declaration=$(declare -p resolved_symbols)
-        eval "declare -A resolved_symbols_copy="${resolved_symbols_declaration#*=}
-        sync="$RANDOM"
-        flock -s "$log/resolved_symbols" -c "source $log/resolved_symbols"
-        #test and concat.
-        declare -p resolved_symbols > "$log/$sync"
-        flock "$log/resolved_symbols" -c "cat $log/$sync > $log/resolved_symbols"
+        eval declare -A "resolved_symbols_copy=${resolved_symbols_declaration#*=}"
+        exec {cache}<"$log/resolved_symbols"
+        flock -x "$cache"
+        resolved_symbols=()
+        source "$log/resolved_symbols"
+        mapfile -t new_symbols < <(comm -23 <(IFS=$'\n'; echo "${!resolved_symbols_copy[*]}"|sort) <(IFS=$'\n'; echo "${!resolved_symbols[*]}"|sort))
+        if [[ -v new_symbols[@] ]]; then
+            for symbol in ${new_symbols[*]}; do
+                resolved_symbols+=(["$symbol"]="${resolved_symbols_copy["$symbol"]}")
+            done
+            declare -p resolved_symbols > "$log/resolved_symbols"
+        fi
+        exec {cache}<&-
     fi
 }
 
