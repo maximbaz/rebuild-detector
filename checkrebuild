@@ -6,6 +6,7 @@
 shopt -s nullglob
 shopt -s extglob
 [ -t 1 ] && declare _terminal_output=1
+[ -t 0 ] || mapfile -t _hook_targets
 
 log="$(mktemp -d)"
 touch "$log/resolved_symbols"
@@ -26,7 +27,11 @@ get_unofficial_pkgs() {
         pacman -Qq
     else
         mapfile -t local_enabled_repos < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server|grep -q "file://" || [[ "${include[*]}" =~ $repo ]] || echo "$repo"; done)
-        comm -23 <(pacman -Qq | sort) <(pacman -Sql ${local_enabled_repos[@]} 2>/dev/null | sort)
+        if [[ -v _hook_targets[@] ]]; then
+            ( IFS=$'\n'; xargs -I{} pactree -rud1 {}<<<"${_hook_targets[*]}"|sort -u)
+        else
+            pacman -Qq
+        fi|sort|comm -23 - <(eval pacman -Sql "${local_enabled_repos[*]}" 2>/dev/null | sort)
     fi
 }
 

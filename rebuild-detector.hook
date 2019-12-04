@@ -7,3 +7,4 @@ Target = *
 Description = Checking which packages need to be rebuilt
 Exec = /usr/bin/checkrebuild
 When = PostTransaction
+NeedsTargets
