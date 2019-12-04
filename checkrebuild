@@ -12,10 +12,11 @@ touch "$log/resolved_symbols"
 trap 'rm -rf "$log"' EXIT
 
 verbose=0
-while getopts "va" OPTION; do
+while getopts "vai:" OPTION; do
     case $OPTION in
         a) system=1 ;;
         v) ((verbose+=1)) ;;
+        i) include+=("$OPTARG") ;;
         *) exit 1 ;;
     esac
 done
@@ -24,8 +25,8 @@ get_unofficial_pkgs() {
     if ((system)); then
         pacman -Qq
     else
-        local_enabled_repos="$(pacconf --repo-list|xargs -I{} bash -c "pacconf --repo={} Server|grep -q -v "file://" && echo {}"|paste -sd ' ' -)"
-        comm -23 <(pacman -Qq | sort) <(eval pacman -Sql "$local_enabled_repos" 2>/dev/null | sort)
+        mapfile -t local_enabled_repos < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server|grep -q "file://" || [[ "${include[*]}" =~ $repo ]] || echo "$repo"; done)
+        comm -23 <(pacman -Qq | sort) <(pacman -Sql ${local_enabled_repos[@]} 2>/dev/null | sort)
     fi
 }
 
