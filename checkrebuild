@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Detect broken packages that need to be rebuilt
+# vim: ts=4 sw=4 et
 
 shopt -s nullglob
 shopt -s extglob
