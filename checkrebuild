@@ -51,6 +51,7 @@ filter_executable() {
 
 ldd_detect_broken_files() {
     declare -a files
+    declare _dirty_cache=0
     declare -A resolved_symbols
     declare -A unresolved_symbols
     mapfile -t files < <(cat)
@@ -63,6 +64,8 @@ ldd_detect_broken_files() {
             for symbol in $(eval echo '${'"$1"'[*]}'); do
                 if scanelf_resolve_symbol=$(eval 'grep -oP "$symbol.*  \K.*" <<<$'"$2"); then
                     resolved_symbols+=(["$symbol"]="$scanelf_resolve_symbol")
+                    #mark cache as dirty.
+                    _dirty_cache=1
                 else
                     eval "$3"'+=("$symbol")'
                 fi
@@ -91,25 +94,26 @@ ldd_detect_broken_files() {
             ldd_resolve=$(LD_LIBRARY_PATH="$library_path" ldd -r "$file" 2>/dev/null)
         fi
         #drop symbol version, not supported by `scanelf`
-        if ! undefined_symbols=$(grep -oP "undefined symbol: \K.*?(?=[\t,])" <<<"$ldd_resolve"); then
-            continue
-        else
+        if undefined_symbols=$(grep -oP "undefined symbol: \K.*?(?=[\t,])" <<<"$ldd_resolve"); then
             #report $files as broken if depends on unresolved symbol.
-            if [[ -s "$log/resolved_symbols" ]]; then
-                flock -s "$log/resolved_symbols" -c "source $log/resolved_symbols"
-            fi
             if [[ -v unresolved_symbols[@] ]] && known_unresolved_symbols=$(grep -f <(IFS=$'\n'; echo "${!unresolved_symbols[*]}") <<<"$undefined_symbols"); then
                 pkg=$(pacman -Qqo "$file")
                 (( verbose )) && echo -e "$pkg: $file\n(cached)unresolved symbols: $known_unresolved_symbols" >&2
                 echo "$pkg"
                 return 0
             fi
+            #read shared cache if exist.
+            if [[ -s "$log/resolved_symbols" ]]; then
+                flock -s "$log/resolved_symbols" -c "source $log/resolved_symbols"
+                #mark cache as clena.
+                _dirty_cache=0
+            fi
             #drop cached symbols.
             if [[ -v resolved_symbols[@] ]]; then
                 undefined_symbols=$(grep -v -f <(IFS=$'\n'; echo "${!resolved_symbols[*]}") <<<"$undefined_symbols")
+                #skip if all symbols in cache.
+                [[ -z "$undefined_symbols" ]] && continue
             fi
-            #skip if all symbols in cache.
-            [[ -z "$undefined_symbols" ]] && continue
             #package wide symbol resolution.
             scanelf_resolve=$(scanelf -qs "+$(tr $'\n' ','<<<"$undefined_symbols"|sed -e 's/,$//' -e 's/,/,\+/g')" "${files[@]}"|grep -f <(echo "${undefined_symbols}"))
             if [ -n "$scanelf_resolve" ]; then
@@ -117,48 +121,65 @@ ldd_detect_broken_files() {
             else
                 mapfile -t local_unresolved_symbols <<<"$undefined_symbols"
             fi
+            if [ -v local_unresolved_symbols ]; then
+                #system wide symbol resolution.
+                scanelf_resolve=$(scanelf -qpls "+$(IFS=','; echo "${local_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')"|grep -f <(IFS=$'\n'; echo "${local_unresolved_symbols[*]}"))
+                if [ -n "$scanelf_resolve" ]; then
+                    resolve_symbol_cache local_unresolved_symbols scanelf_resolve system_wide_unresolved_symbols
+                else
+                    mapfile -t system_wide_unresolved_symbols <<<"$local_unresolved_symbols"
+                fi
+                if [ -v system_wide_unresolved_symbols ]; then
+                #do a deep search.
+                scanelf_resolve=$(scanelf -qRs "+$(IFS=','; echo "${system_wide_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')" /usr/{bin,lib}|grep -f <(IFS=$'\n'; echo "${system_wide_unresolved_symbols[*]}"))
+                [ -n "$scanelf_resolve" ] && resolve_symbol_cache system_wide_unresolved_symbols scanelf_resolve deep_unresolved_symbols
+                fi
+                if [ -v deep_unresolved_symbols ]; then
+                    pkg=$(pacman -Qqo "$file")
+                    (( verbose )) && echo -e "$pkg: $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
+                    #cache unresolved symbols
+                    for symbol in ${deep_unresolved_symbols[*]}; do
+                        unresolved_symbols+=(["$symbol"]="$file")
+                    done
+                    echo "$pkg"
+                    return 0
+                fi
+            fi
         fi
-        if [ -v local_unresolved_symbols ]; then
-            #system wide symbol resolution.
-            scanelf_resolve=$(scanelf -qpls "+$(IFS=','; echo "${local_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')"|grep -f <(IFS=$'\n'; echo "${local_unresolved_symbols[*]}"))
-            if [ -n "$scanelf_resolve" ]; then
-                resolve_symbol_cache local_unresolved_symbols scanelf_resolve system_wide_unresolved_symbols
+        if ((_dirty_cache)); then
+            #if shared cache empty, export current symbol cache.
+            #if not empty, merge current symbol before exporting.
+            if [[ ! -s "$log/resolved_symbols" ]]; then
+                exec {cache}<"$log/resolved_symbols"
+                flock -x "$cache"
+                declare -p resolved_symbols > "$log/resolved_symbols"
+                exec {cache}<&-
             else
-                mapfile -t system_wide_unresolved_symbols <<<"$local_unresolved_symbols"
+                #create a copy of resolved_symbols for merge.
+                resolved_symbols_declaration=$(declare -p resolved_symbols)
+                eval declare -A "resolved_symbols_copy=${resolved_symbols_declaration#*=}"
+                #local shared cache.
+                exec {cache}<"$log/resolved_symbols"
+                flock -x "$cache"
+                #read shared cache.
+                source "$log/resolved_symbols"
+                #detect new symbols.
+                mapfile -t new_symbols < <(comm -23 <(IFS=$'\n'; echo "${!resolved_symbols_copy[*]}"|sort) <(IFS=$'\n'; echo "${!resolved_symbols[*]}"|sort))
+                if [[ -v new_symbols[@] ]]; then
+                    #append new symbols to shared cache.
+                    for symbol in ${new_symbols[*]}; do
+                        resolved_symbols+=(["$symbol"]="${resolved_symbols_copy["$symbol"]}")
+                    done
+                    #export shared cache.
+                    declare -p resolved_symbols > "$log/resolved_symbols"
+                fi
+                #unlock shared cache.
+                exec {cache}<&-
             fi
-            if [ -v system_wide_unresolved_symbols ]; then
-            #do a deep search.
-            scanelf_resolve=$(scanelf -qRs "+$(IFS=','; echo "${system_wide_unresolved_symbols[*]}"|sed -e 's/,$//' -e 's/,/,\+/g')" /usr/{bin,lib}|grep -f <(IFS=$'\n'; echo "${system_wide_unresolved_symbols[*]}"))
-            [ -n "$scanelf_resolve" ] && resolve_symbol_cache system_wide_unresolved_symbols scanelf_resolve deep_unresolved_symbols
-            fi
-            if [ -v deep_unresolved_symbols ]; then
-                pkg=$(pacman -Qqo "$file")
-                (( verbose )) && echo -e "$pkg: $file\nunresolved symbols: ${deep_unresolved_symbols[*]}" >&2
-                #cache unresolved symbols
-                for symbol in ${deep_unresolved_symbols[*]}; do
-                    unresolved_symbols+=(["$symbol"]="$file")
-                done
-                echo "$pkg"
-                return 0
-            fi
+            #mark cache as clean
+            _dirty_cache=0
         fi
     done
-    if [[ -v resolved_symbols[@] ]]; then
-        resolved_symbols_declaration=$(declare -p resolved_symbols)
-        eval declare -A "resolved_symbols_copy=${resolved_symbols_declaration#*=}"
-        exec {cache}<"$log/resolved_symbols"
-        flock -x "$cache"
-        resolved_symbols=()
-        source "$log/resolved_symbols"
-        mapfile -t new_symbols < <(comm -23 <(IFS=$'\n'; echo "${!resolved_symbols_copy[*]}"|sort) <(IFS=$'\n'; echo "${!resolved_symbols[*]}"|sort))
-        if [[ -v new_symbols[@] ]]; then
-            for symbol in ${new_symbols[*]}; do
-                resolved_symbols+=(["$symbol"]="${resolved_symbols_copy["$symbol"]}")
-            done
-            declare -p resolved_symbols > "$log/resolved_symbols"
-        fi
-        exec {cache}<&-
-    fi
 }
 
 get_broken_ldd_pkgs() {
