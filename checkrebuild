@@ -9,21 +9,22 @@ log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
 
 verbose=0
-while getopts "v" OPTION; do
+while getopts "vi:" OPTION; do
     case $OPTION in
         v) verbose=1 ;;
+        i) include+=("$OPTARG") ;;
         *) exit 1 ;;
     esac
 done
 
 get_unofficial_pkgs() {
-    official_repos="testing core extra community-testing community multilib-testing multilib"
-    comm -23 <(pacman -Qq | sort) <(pacman -Sl $official_repos 2>/dev/null | awk '/\[.*[[:alpha:]]+]$/ {print $2};/\[.*[[:digit:]]+]$/ {print $2}' | sort)
+    mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
+    comm -23 <(pacman -Qq | sort) <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
 }
 
 filter_executable() {
     while read -r file; do
-        [[ -f $file && -x $file ]] && echo $file
+        [[ -f "$file" && -x "$file" ]] && echo "$file"
     done
 }
 
@@ -42,13 +43,13 @@ get_broken_ldd_pkgs() {
 get_broken_python_pkgs() {
     command -v python >/dev/null || return
     python_version="$(python3 -c 'import sys; print (sys.version_info.minor)')"
-    pacman -Qqo /usr/lib/python3.!($python_version) 2>/dev/null
+    pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null
 }
 
 get_broken_perl_pkgs() {
     command -v perl >/dev/null || return
     perl_version="$(perl -E 'say $^V =~ /(\d+[.]\d+)/')"
-    pacman -Qqo /usr/lib/perl*/!($perl_version) 2>/dev/null
+    pacman -Qqo /usr/lib/perl*/!("$perl_version") 2>/dev/null
 }
 
 get_broken_ruby_pkgs() {
