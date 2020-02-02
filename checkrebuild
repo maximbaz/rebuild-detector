@@ -28,16 +28,24 @@ filter_executable() {
     done
 }
 
-get_broken_ldd_pkgs() {
-    get_unofficial_pkgs |
+get_package_files() {
     xargs pacman -Qql |
     perl -pe 's/\n/\0/' |
     xargs -0 readlink -f |
-    filter_executable |
-    parallel --will-cite '
-        ldd "{}" 2>/dev/null |
-        grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd {}\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
-        pacman -Qqo "{}"'
+    filter_executable
+}
+
+check_broken_ldd() {
+    ldd "$1" 2>/dev/null |
+    grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd $1\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
+    pacman -Qqo "$1"
+}
+
+get_broken_ldd_pkgs() {
+    export -f check_broken_ldd
+    get_unofficial_pkgs |
+    get_package_files |
+    parallel --will-cite 'check_broken_ldd "{}"'
 }
 
 get_broken_python_pkgs() {
