@@ -51,11 +51,18 @@ get_broken_perl_pkgs() {
     pacman -Qqo /usr/lib/perl*/!($perl_version) 2>/dev/null
 }
 
+get_broken_ruby_pkgs() {
+    command -v ruby >/dev/null || return
+    ruby_version="$(ruby -e 'puts RUBY_VERSION')"
+    pacman -Qqo /usr/lib/ruby/gems/!("$ruby_version") 2>/dev/null
+}
+
 get_broken_pkgs() {
     {
         get_broken_ldd_pkgs
         get_broken_python_pkgs
         get_broken_perl_pkgs
+        get_broken_ruby_pkgs
     } | sort -u
 }
 
