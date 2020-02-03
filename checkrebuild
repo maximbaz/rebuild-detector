@@ -37,12 +37,13 @@ get_package_files() {
 
 check_broken_ldd() {
     ldd "$1" 2>/dev/null |
-    grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd $1\n" >> "'$log'/$f"; c++filt "$out" >> "'$log'/$f"; } ) &&
+    grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd $1\n" >> "$log/$f"; c++filt "$out" >> "$log/$f"; } ) &&
     pacman -Qqo "$1"
 }
 
 get_broken_ldd_pkgs() {
     export -f check_broken_ldd
+    export log
     get_unofficial_pkgs |
     get_package_files |
     parallel --will-cite 'check_broken_ldd "{}"'
