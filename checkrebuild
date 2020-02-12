@@ -67,12 +67,19 @@ get_broken_ruby_pkgs() {
     pacman -Qqo /usr/lib/ruby/gems/!("$ruby_version") 2>/dev/null
 }
 
+get_broken_haskell_pkgs() {
+    command -v ghc >/dev/null || return
+    haskell_version="$(ghc --numeric-version)"
+    pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null
+}
+
 get_broken_pkgs() {
     {
         get_broken_ldd_pkgs
         get_broken_python_pkgs
         get_broken_perl_pkgs
         get_broken_ruby_pkgs
+        get_broken_haskell_pkgs
     } | sort -u
 }
 
