@@ -4,7 +4,7 @@
 
 shopt -s nullglob
 shopt -s extglob
-[ -t 0 ] || mapfile -t _hook_targets
+[ -t 0 ] || mapfile -t hook_targets
 
 log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
@@ -20,11 +20,13 @@ done
 
 get_unofficial_pkgs() {
     mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
-        if [[ -v _hook_targets[@] ]]; then
-            ( IFS=$'\n'; xargs -I{} pactree -rud1 {}<<<"${_hook_targets[*]}"|sort -u)
+        if (( ${#hook_targets[@]} )); then
+            printf "%s\n" "${hook_targets[@]}" | xargs -L1 pactree -rud1
         else
             pacman -Qq
-        fi|sort|comm -23 - <(eval pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
+        fi |
+        sort -u |
+        comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
 }
 
 filter_executable() {
