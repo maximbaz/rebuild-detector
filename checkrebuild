@@ -45,13 +45,14 @@ filter_executable() {
 
 check_broken_ldd() {
     ldd "$1" 2>/dev/null |
-    grep "not found" > >( out="$(cat)"; f="$RANDOM"; [ -n "$out" ] && { echo -e "\nldd $1\n" >> "$log/$f"; c++filt "$out" >> "$log/$f"; } ) &&
+    grep "not found" > >( out="$(cat)"; f="$RANDOM"; (( verbose )) && [ -n "$out" ] && { echo -e "\nldd $1\n" >> "$log/$f"; c++filt "$out" >> "$log/$f"; } ) &&
     pacman -Qqo "$1"
 }
 
 get_broken_ldd_pkgs() {
     export -f check_broken_ldd
     export log
+    export verbose
     get_unofficial_pkgs |
     get_package_files |
     filter_executable |
@@ -61,24 +62,28 @@ get_broken_ldd_pkgs() {
 get_broken_python_pkgs() {
     command -v python >/dev/null || return
     python_version="$(python3 -c 'import sys; print (sys.version_info.minor)')"
+    (( verbose )) && pacman -Qo /usr/lib/python3.!("$python_version") >"$log/$RANDOM" 2>/dev/null
     pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null
 }
 
 get_broken_perl_pkgs() {
     command -v perl >/dev/null || return
     perl_version="$(perl -E 'say $^V =~ /(\d+[.]\d+)/')"
+    (( verbose )) && pacman -Qo /usr/lib/perl*/!("$perl_version") >"$log/$RANDOM" 2>/dev/null
     pacman -Qqo /usr/lib/perl*/!("$perl_version") 2>/dev/null
 }
 
 get_broken_ruby_pkgs() {
     command -v ruby >/dev/null || return
     ruby_version="$(ruby -e 'puts RUBY_VERSION')"
+    (( verbose )) && pacman -Qo /usr/lib/ruby/gems/!("$ruby_version") >"$log/$RANDOM" 2>/dev/null
     pacman -Qqo /usr/lib/ruby/gems/!("$ruby_version") 2>/dev/null
 }
 
 get_broken_haskell_pkgs() {
     command -v ghc >/dev/null || return
     haskell_version="$(ghc --numeric-version)"
+    (( verbose )) && pacman -Qo /usr/lib/ghc-!("$haskell_version") >"$log/$RANDOM" 2>/dev/null
     pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null
 }
 
