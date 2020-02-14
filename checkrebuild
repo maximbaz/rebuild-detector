@@ -21,7 +21,7 @@ done
 get_unofficial_pkgs() {
     mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
         if (( ${#hook_targets[@]} )); then
-            printf "%s\n" "${hook_targets[@]}" | xargs -L1 pactree -rud1
+            printf "%s\n" "${hook_targets[@]}" | xargs -rL1 pactree -rud1
         else
             pacman -Qq
         fi |
@@ -30,16 +30,16 @@ get_unofficial_pkgs() {
 }
 
 get_package_files() {
-    xargs pacman -Qql |
+    xargs -r pacman -Qql |
     perl -pe 's/\n/\0/' |
-    xargs -0 readlink -ez |
+    xargs -r0 readlink -ez |
     sort -uz
 }
 
 filter_executable() {
-    LANG=C xargs -0 stat --printf "%F %a\t%n\0" |
+    LANG=C xargs -r0 stat --printf "%F %a\t%n\0" |
     grep -ozP "^regular file \d?[1357]\d\d\t\K.*" |
-    xargs -0 file -N |
+    xargs -r0 file -N |
     grep -oP ".*(?=: ELF )"
 }
 
