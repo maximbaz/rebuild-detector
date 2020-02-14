@@ -20,13 +20,13 @@ done
 
 get_unofficial_pkgs() {
     mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
-        if (( ${#hook_targets[@]} )); then
-            printf "%s\n" "${hook_targets[@]}" | xargs -rL1 pactree -rud1
-        else
-            pacman -Qq
-        fi |
-        sort -u |
-        comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
+    if (( ${#hook_targets[@]} )); then
+        printf "%s\n" "${hook_targets[@]}" | xargs -rL1 pactree -rud1
+    else
+        pacman -Qq
+    fi |
+    sort -u |
+    comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
 }
 
 get_package_files() {
