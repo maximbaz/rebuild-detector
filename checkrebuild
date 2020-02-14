@@ -29,17 +29,18 @@ get_unofficial_pkgs() {
         comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
 }
 
-filter_executable() {
-    while read -r file; do
-        [[ -f "$file" && -x "$file" ]] && echo "$file"
-    done
-}
-
 get_package_files() {
     xargs pacman -Qql |
     perl -pe 's/\n/\0/' |
-    xargs -0 readlink -f |
-    filter_executable
+    xargs -0 readlink -ez |
+    sort -uz
+}
+
+filter_executable() {
+    LANG=C xargs -0 stat --printf "%F %a\t%n\0" |
+    grep -ozP "^regular file \d?[1357]\d\d\t\K.*" |
+    xargs -0 file -N |
+    grep -oP ".*(?=: ELF )"
 }
 
 check_broken_ldd() {
@@ -53,6 +54,7 @@ get_broken_ldd_pkgs() {
     export log
     get_unofficial_pkgs |
     get_package_files |
+    filter_executable |
     parallel --will-cite 'check_broken_ldd "{}"'
 }
 
