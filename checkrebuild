@@ -74,10 +74,12 @@ get_broken_perl_pkgs() {
 }
 
 get_broken_ruby_pkgs() {
-    command -v ruby >/dev/null || return
-    ruby_version="$(ruby -e 'puts RUBY_VERSION')"
-    (( verbose )) && pacman -Qo /usr/lib/ruby/gems/!("$ruby_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo /usr/lib/ruby/gems/!("$ruby_version") 2>/dev/null
+    command -v ruby >&- && command -v gem >&- || return
+    ruby_gemdir="$( gem environment gemdir )"
+    ruby_version="${ruby_gemdir##*/}"
+    ruby_install_path="${ruby_gemdir%/*}"
+    (( verbose )) && pacman -Qo "$ruby_install_path"/!("$ruby_version") >"$log/$RANDOM" 2>/dev/null
+    pacman -Qqo "$ruby_install_path"/!("$ruby_version") 2>/dev/null
 }
 
 get_broken_haskell_pkgs() {
