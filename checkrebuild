@@ -63,7 +63,7 @@ get_broken_python_pkgs() {
     command -v python >/dev/null || return
     python_version="$(python3 -c 'import sys; print (sys.version_info.minor)')"
     (( verbose )) && pacman -Qo /usr/lib/python3.!("$python_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null
+    pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null | grep -v '^python3[0-9]'
 }
 
 get_broken_perl_pkgs() {
