@@ -18,13 +18,16 @@ while getopts "vi:" OPTION; do
     esac
 done
 
-get_unofficial_pkgs() {
-    mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
+print_packages() {
     if (( ${#hook_targets[@]} )); then
         printf "%s\n" "${hook_targets[@]}" | xargs -rL1 pactree -rud1
     else
         pacman -Qq
-    fi |
+    fi
+}
+
+filter_packages_by_repos() {
+    mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
     sort -u |
     comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
 }
@@ -53,7 +56,8 @@ get_broken_ldd_pkgs() {
     export -f check_broken_ldd
     export log
     export verbose
-    get_unofficial_pkgs |
+    print_packages |
+    filter_packages_by_repos |
     get_package_files |
     filter_executable |
     parallel --will-cite 'check_broken_ldd "{}"'
@@ -62,15 +66,19 @@ get_broken_ldd_pkgs() {
 get_broken_python_pkgs() {
     command -v python >/dev/null || return
     python_version="$(python3 -c 'import sys; print (sys.version_info.minor)')"
+    pkgs="$log/$RANDOM"
+    pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null | grep -v '^python3[0-9]' | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/python3.!("$python_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null | grep -v '^python3[0-9]'
+    rm -f "$pkgs"
 }
 
 get_broken_perl_pkgs() {
     command -v perl >/dev/null || return
     perl_version="$(perl -E 'say $^V =~ /(\d+[.]\d+)/')"
-    (( verbose )) && pacman -Qo /usr/lib/perl*/!("$perl_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo /usr/lib/perl*/!("$perl_version") 2>/dev/null
+    pkgs="$log/$RANDOM"
+    pacman -Qqo /usr/lib/perl*/!("$perl_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
+    (( verbose )) && pacman -Qo /usr/lib/perl*/!("$perl_version") | grep -f "$pkgs" >"$log/$RANDOM" 2>/dev/null
+    rm -f "$pkgs"
 }
 
 get_broken_ruby_pkgs() {
@@ -78,15 +86,19 @@ get_broken_ruby_pkgs() {
     ruby_gemdir="$( gem environment gemdir )"
     ruby_version="${ruby_gemdir##*/}"
     ruby_install_path="${ruby_gemdir%/*}"
+    pkgs="$log/$RANDOM"
+    pacman -Qqo "$ruby_install_path"/!("$ruby_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo "$ruby_install_path"/!("$ruby_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo "$ruby_install_path"/!("$ruby_version") 2>/dev/null
+    rm -f "$pkgs"
 }
 
 get_broken_haskell_pkgs() {
     command -v ghc >/dev/null || return
     haskell_version="$(ghc --numeric-version)"
+    pkgs="$log/$RANDOM"
+    pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/ghc-!("$haskell_version") >"$log/$RANDOM" 2>/dev/null
-    pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null
+    rm -f "$pkgs"
 }
 
 get_broken_pkgs() {
@@ -108,7 +120,7 @@ join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $
 
 if (( verbose )); then
     cd "$log"
-    for f in *; do
+    find . -not -empty -type f | while read -r f; do
         echo
         cat "$f"
     done
