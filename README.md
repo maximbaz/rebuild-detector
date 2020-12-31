@@ -16,7 +16,7 @@ The package is available on AUR: https://aur.archlinux.org/packages/rebuild-dete
 
 ## Usage
 
-Run `checkrebuild` to see which packages need to be rebuilt.
+Run `checkrebuild` to see which packages need to be rebuilt. If you see no output, it means there is nothing to rebuild.
 
 Use verbose mode `checkrebuild -v` to get a bit more information about why these packages are flagged.
 
