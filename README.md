@@ -22,6 +22,21 @@ Use verbose mode `checkrebuild -v` to get a bit more information about why these
 
 By default only packages from local repos (`file://`) are checked, if you want to include additional repos, use `-i` flag like so: `checkrebuild -i repo1 -i repo2`
 
+## What do I do if a package is flagged?
+
+First things first, run `checkrebuild -v` to see exactly why the package is flagged.
+
+If a package is missing a `.so` file, this means the binary is linked against a library that is not present on your computer. It can happen for two reasons:
+
+1. You are missing a dependency entirely
+2. The binary is linked against an older version of the installed dependency
+
+The first case cannot be solved by rebuilding the package. Sometimes it can be fixed by installing a missing dependency, but especially if a binary was built by someone else (typical for `-bin` packages) there is nothing you can do.
+
+The second case happens when a package was not flagged in the past, but is suddenly flagged after an update. In this case, `checkrebuild -v` might show that the missing library is e.g. `*-7.so` but if you currently have `*-8.so` instaled on your computer. This is the case `rebuild-detector` was built for: rebuild the flagged package and the error should be gone.
+
+If you cannot fix the package, the only thing you can do is to ignore it altogether, i.e. next time run `checkrebuild | grep -v broken-pkg`.
+
 ## Pacman hook
 
 A pacman hook is included in the distribution as well. For performance reasons, the `ldd` check is only executed against direct dependencies of the packages that are being updated in this pacman transaction.
