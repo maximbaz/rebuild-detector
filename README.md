@@ -33,7 +33,7 @@ If a package is missing a `.so` file, this means the binary is linked against a 
 
 The first case cannot be solved by rebuilding the package. Sometimes it can be fixed by installing a missing dependency, but especially if a binary was built by someone else (typical for `-bin` packages) there is nothing you can do.
 
-The second case happens when a package was not flagged in the past, but is suddenly flagged after an update. In this case, `checkrebuild -v` might show that the missing library is e.g. `*-7.so` but if you currently have `*-8.so` installed on your computer. This is the case `rebuild-detector` was built for: rebuild the flagged package and the error should be gone.
+The second case happens when a package was not flagged in the past, but is suddenly flagged after an update. In this case, `checkrebuild -v` might show that the missing library is e.g. `*-7.so` but you currently have `*-8.so` installed on your computer. This is the case `rebuild-detector` was built for: rebuild the flagged package and the error should be gone.
 
 If you cannot fix the package, the only thing you can do is to ignore it altogether, i.e. next time run `checkrebuild | grep -v broken-pkg`.
 
