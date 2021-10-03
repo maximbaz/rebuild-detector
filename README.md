@@ -12,7 +12,9 @@ Supported checks:
 
 ## Installation
 
-The package is available on AUR: https://aur.archlinux.org/packages/rebuild-detector/
+```sh
+pacman -S rebuild-detector
+```
 
 ## Usage
 
