@@ -26,10 +26,18 @@ print_packages() {
     fi
 }
 
+get_included_repos() {
+    echo "__checkrebuild-reserved__" # make sure to pass at least one argument further to pacman -Sl
+    for repo in $(pacconf --repo-list); do
+        if pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]]; then
+            echo "$repo"
+        fi
+    done
+}
+
 filter_packages_by_repos() {
-    mapfile -t repos_to_skip < <(for repo in $(pacconf --repo-list); do pacconf --repo="$repo" Server | grep -q "file://" || [[ " ${include[@]} " =~ " $repo " ]] || echo "$repo"; done)
     sort -u |
-    comm -23 - <(pacman -Sql "${repos_to_skip[@]}" 2>/dev/null | sort)
+    comm -12 - <(pacman -Sql $(get_included_repos) 2>/dev/null | sort)
 }
 
 get_package_files() {
@@ -112,7 +120,7 @@ get_broken_pkgs() {
 }
 
 get_repo_pkgs() {
-    pacman -Sl | cut -d' ' -f1-2
+    pacman -Sl $(get_included_repos) 2>/dev/null | cut -d' ' -f1-2
     pacman -Qqm | awk '{print "foreign", $0}'
 }
 
