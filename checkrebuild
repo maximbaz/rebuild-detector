@@ -9,16 +9,18 @@ shopt -s extglob
 log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
 
+exit_usage() {
+    echo "Usage: $0 [-v] [-i repo1] [-i repo2]"
+    exit "$1"
+}
+
 verbose=0
 while getopts "hvi:" OPTION; do
     case $OPTION in
         v) verbose=1 ;;
         i) include+=("$OPTARG") ;;
-        h)
-            echo "Usage: $(basename $0) [-v] [-i repo1] [-i repo2]"
-            exit 1
-            ;;
-        *) exit 1 ;;
+        h) exit_usage 0 ;;
+        *) exit_usage 1 ;;
     esac
 done
 
