@@ -37,7 +37,7 @@ get_included_repos() {
 
 filter_packages_by_repos() {
     sort -u |
-    comm -12 - <(pacman -Sql $(get_included_repos) 2>/dev/null | sort)
+    comm -12 - <(get_pkgs)
 }
 
 get_package_files() {
@@ -120,11 +120,17 @@ get_broken_pkgs() {
 }
 
 get_repo_pkgs() {
-    pacman -Sl $(get_included_repos) 2>/dev/null | cut -d' ' -f1-2
-    pacman -Qqm | awk '{print "foreign", $0}'
+    {
+        pacman -Sl $(get_included_repos) 2>/dev/null | cut -d' ' -f1-2
+        pacman -Qqm | awk '{print "foreign", $0}'
+    } | sort -k2
 }
 
-join -12 <(get_repo_pkgs | sort -k2) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
+get_pkgs() {
+    get_repo_pkgs | awk '{print $2}'
+}
+
+join -12 <(get_repo_pkgs) <(get_broken_pkgs) | awk '{ print $2 "\t" $1 }'
 
 if (( verbose )); then
     cd "$log"
