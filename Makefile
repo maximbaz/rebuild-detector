@@ -1,5 +1,8 @@
 BIN := rebuild-detector
-VERSION := 4.4.0
+
+ifndef VERSION
+$(error VERSION is not set)
+endif
 
 .PHONY: release
 release:
