@@ -10,15 +10,18 @@ log="$(mktemp -d)"
 trap 'rm -rf "$log"' EXIT
 
 verbose=0
-while getopts "hvi:" OPTION; do
+while getopts ":hvi:" OPTION; do
     case $OPTION in
         v) verbose=1 ;;
         i) include+=("$OPTARG") ;;
         h)
             echo "Usage: $(basename $0) [-v] [-i repo1] [-i repo2]"
-            exit 1
+            exit 0
             ;;
-        *) exit 1 ;;
+        *) echo "Unrecognized parameter: $OPTARG"
+           echo "Usage: $(basename $0) [-v] [-i repo1] [-i repo2]"
+           exit 1
+           ;;
     esac
 done
 
