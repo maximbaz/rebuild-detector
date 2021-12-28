@@ -1,8 +1,9 @@
-.PHONY: release
+BIN := rebuild-detector
+VERSION := 4.4.0
 
+.PHONY: release
 release:
 	rm -rf release
 	mkdir -p release
-	tar -czf rebuild-detector.tar.gz checkrebuild LICENSE rebuild-detector.hook
-	gpg --detach-sign --yes rebuild-detector.tar.gz
-	mv rebuild-detector.tar.gz* release
+	git archive -o "release/$(BIN)-$(VERSION).tar.gz" --format tar.gz --prefix "$(BIN)-$(VERSION)/" "$(VERSION)"
+	gpg --detach-sign --yes "release/$(BIN)-$(VERSION).tar.gz"
