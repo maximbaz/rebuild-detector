@@ -107,8 +107,8 @@ get_broken_ruby_pkgs() {
 }
 
 get_broken_haskell_pkgs() {
-    command -v ghc >/dev/null || return
-    haskell_version="$(ghc --numeric-version)"
+    [[ -x /usr/bin/ghc ]] || return
+    haskell_version="$(/usr/bin/ghc --numeric-version)"
     pkgs="$log/$RANDOM"
     pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/ghc-!("$haskell_version") 2>/dev/null | grep -f "$pkgs" >"$log/$RANDOM"
