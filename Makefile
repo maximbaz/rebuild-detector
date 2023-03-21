@@ -18,7 +18,7 @@ sign:
 	[ -n "$(VERSION)" ] || { echo >&2 "VERSION is not set"; exit 1; }
 	rm -rf release
 	mkdir -p release
-	git archive -o "release/$(BIN)-$(VERSION).tar.gz" --format tar.gz --prefix "$(BIN)-$(VERSION)/" "$(VERSION)"
+	git -c tar.tar.gz.command="gzip -cn" archive -o "release/$(BIN)-$(VERSION).tar.gz" --format tar.gz --prefix "$(BIN)-$(VERSION)/" "$(VERSION)"
 	gpg --detach-sign --yes "release/$(BIN)-$(VERSION).tar.gz"
 	rm "release/$(BIN)-$(VERSION).tar.gz"
 
