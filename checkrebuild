@@ -78,8 +78,8 @@ get_broken_ldd_pkgs() {
 }
 
 get_broken_python_pkgs() {
-    command -v python >/dev/null || return
-    python_version="$(python3 -c 'import sys; print (sys.version_info.minor)')"
+    [[ -x /usr/bin/python3 ]] || return
+    python_version="$(/usr/bin/python3 -c 'import sys; print (sys.version_info.minor)')"
     pkgs="$log/$RANDOM"
     pacman -Qqo /usr/lib/python3.!("$python_version") 2>/dev/null | grep -v '^python3[0-9]' | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/python3.!("$python_version") 2>/dev/null | grep -f "$pkgs" >"$log/$RANDOM"
@@ -87,8 +87,8 @@ get_broken_python_pkgs() {
 }
 
 get_broken_perl_pkgs() {
-    command -v perl >/dev/null || return
-    perl_version="$(perl -E 'say $^V =~ /(\d+[.]\d+)/')"
+    [[ -x /usr/bin/perl ]] || return
+    perl_version="$(/usr/bin/perl -E 'say $^V =~ /(\d+[.]\d+)/')"
     pkgs="$log/$RANDOM"
     pacman -Qqo /usr/lib/perl*/!("$perl_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/perl*/!("$perl_version") 2>/dev/null | grep -f "$pkgs" >"$log/$RANDOM"
@@ -96,8 +96,8 @@ get_broken_perl_pkgs() {
 }
 
 get_broken_ruby_pkgs() {
-    command -v ruby >&- && command -v gem >&- || return
-    ruby_gemdir="$( gem environment gemdir )"
+    [[ -x /usr/bin/ruby && -x /usr/bin/gem ]] || return
+    ruby_gemdir="$(/usr/bin/gem environment gemdir)"
     ruby_version="${ruby_gemdir##*/}"
     ruby_install_path="${ruby_gemdir%/*}"
     pkgs="$log/$RANDOM"
@@ -107,8 +107,8 @@ get_broken_ruby_pkgs() {
 }
 
 get_broken_haskell_pkgs() {
-    command -v ghc >/dev/null || return
-    haskell_version="$(ghc --numeric-version)"
+    [[ -x /usr/bin/ghc ]] || return
+    haskell_version="$(/usr/bin/ghc --numeric-version)"
     pkgs="$log/$RANDOM"
     pacman -Qqo /usr/lib/ghc-!("$haskell_version") 2>/dev/null | filter_packages_by_repos | tee "$pkgs"
     (( verbose )) && pacman -Qo /usr/lib/ghc-!("$haskell_version") 2>/dev/null | grep -f "$pkgs" >"$log/$RANDOM"
