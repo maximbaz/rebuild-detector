@@ -42,3 +42,5 @@ If you cannot fix the package, the only thing you can do is to ignore it altoget
 ## Pacman hook
 
 A pacman hook is included in the distribution as well. For performance reasons, the `ldd` check is only executed against direct dependencies of the packages that are being updated in this pacman transaction.
+
+This can be replicated manually by passing the list of such packages on stdin, e.g. `printf 'pkg1\npkg2' | checkrebuild`. Just remember, this feature is intended for detecting packages that get broken by upgrading `pkg1` and `pkg2`, so in this case `ldd` will not be checking binaries in `pkg1` and `pkg2` themselves, but rather the binaries of all packages who directly depend on `pkg1` or `pkg2`.
