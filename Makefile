@@ -25,7 +25,7 @@ sign:
 .PHONY: docs
 docs:
 	marked-man -i README.md -o "$(BIN).7"
-	gzip "$(BIN).7"
+	gzip "$(BIN).7" -n
 
 .PHONY: install
 install:
