@@ -62,7 +62,7 @@ filter_executable() {
 
 check_broken_ldd() {
     LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(dirname "$1")" ldd "$1" 2>/dev/null |
-    grep "not found" > >( out="$(cat)"; f="$RANDOM"; (( verbose )) && [ -n "$out" ] && { echo -e "ldd $1\n" >> "$log/$f"; c++filt "$out" >> "$log/$f"; } ) &&
+    grep "not found" > >( out="$(cat)"; f="$RANDOM"; (( verbose )) && [ -n "$out" ] && { echo -e "ldd $1\n" >> "$log/$f"; echo "$out" | c++filt >> "$log/$f"; } ) &&
     pacman -Qqo "$1"
 }
 
