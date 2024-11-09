@@ -74,7 +74,7 @@ get_broken_ldd_pkgs() {
     filter_packages_by_repos |
     get_package_files |
     filter_executable |
-    parallel --will-cite 'check_broken_ldd "{}"'
+    HOME=/tmp parallel --will-cite 'check_broken_ldd "{}"'
 }
 
 get_broken_python_pkgs() {
